@@ -454,6 +454,117 @@ router.get("/getBalance/:walletAddress", (req, response) => {
 });
 // ===========================================================================================================================================================
 
+router.get("/disputeEth", async function (request, response) {
+	var ResponseCode = 200;
+	var ResponseMessage = ``;
+	var ResponseData = null;
+//=====
+	try {
+		if (request.body) {
+			var ValidationCheck = true;
+
+			if (!request.body.from_private_key) {
+				ResponseMessage += "private key is missing \n";
+				ValidationCheck = false;
+			}
+			if (!request.body.from_address) {
+				ResponseMessage += "from address is missing \n";
+				ValidationCheck = false;
+			}
+			if (!request.body.trading_id) {
+				ResponseMessage = "Trading id is missing \n";
+				ValidationCheck = false;
+			}
+
+
+			if (ValidationCheck == true) {
+				let tradingId = request.body.trading_id;
+				let privateKey = request.body.from_private_key;
+
+				let fromAddress = request.body.from_address;
+
+
+				if (fromAddress.length < 42) {
+					ResponseMessage = "Invalid from Address";
+					ResponseCode = 400;
+					return;
+				}
+
+
+
+
+
+
+				web3.eth.defaultAccount = fromAddress;
+
+
+				let contract = new web3.eth.Contract(abi, contractAddress);
+				//let count = web3.eth.getTransactionCount(web3.eth.defaultAccount);
+				let count = await web3.eth.getTransactionCount(fromAddress, 'latest');
+				let data = contract.methods.dispute_Delivery(tradingId).encodeABI();
+				//console.log(data);
+
+				let gasPrice = web3.eth.gasPrice;
+				let gasLimit = 200000;
+				//let gasLimit = web3.utils.toHex(6721975) ;
+				var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
+
+				var xmlHttp = new XMLHttpRequest();
+				xmlHttp.open("GET", "https://api-rinkeby.etherscan.io/api?module=account&action=tokenbalance&contractaddress=" +
+					contractAddress +
+					"&address=" +
+					fromAddress +
+					"&tag=latest&apikey=YourApiKeyToken", false); // false for synchronous request
+				xmlHttp.send();
+				var transactions = JSON.parse(xmlHttp.responseText);
+
+				let rawTransaction = {
+					"from": fromAddress,
+					"nonce": web3.utils.toHex(count),
+					"gasPrice": web3.utils.toHex(200000000000),
+					"gasLimit": web3.utils.toHex(gasLimit),
+					//	"value": web3.utils.toHex(web3.utils.toWei(Value, "ether")),
+
+					"to": contractAddress,
+					//"to": toAddress,
+					"data": data,
+					"chainId": 0x04
+				};
+				privateKey = Buffer.from(privateKey, 'hex');
+				let tx = new Tx(rawTransaction, { 'chain': 'rinkeby' });
+				console.log("This is tx", tx);
+
+				tx.sign(privateKey);
+				let serializedTx = tx.serialize();
+				let hashObj = await sendrawtransaction(serializedTx);
+				console.log("This is hashobj", hashObj);
+
+				if (hashObj.response == '') {
+					let hash = hashObj.hash;
+					ResponseData = await getTransaction(hash);
+					ResponseMessage = "Transaction successfully completed";
+					ResponseCode = 200;
+				} else {
+					ResponseMessage = hashObj.response;
+					ResponseCode = 400;
+					return;
+				}
+
+
+			}
+
+		}
+	} catch (error) {
+		ResponseMessage = `Transaction signing stops with the error  ${error}`;
+		ResponseCode = 400
+	} finally {
+		return response.status(200).json({
+			code: ResponseCode,
+			data: ResponseData,
+			msg: ResponseMessage
+		});
+	}
+});
 
 
 
